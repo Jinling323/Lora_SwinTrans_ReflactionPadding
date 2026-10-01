@@ -1,0 +1,7 @@
+model,domain,split,images,mae,rmse,checkpoint
+baseline,clean,val,182,63.81571931105394,92.85096345891611,model/swin_t_trans/baseline/0922-200006/best_model.pth
+baseline,hazy,val,182,165.31271087730323,281.8290192989928,model/swin_t_trans/baseline/0922-200006/best_model.pth
+baseline,mix,val,364,114.56421509417859,209.82003900280958,model/swin_t_trans/baseline/0922-200006/best_model.pth
+lora,clean,val,182,63.58292894049005,93.22638020047913,model/swin_t_trans/lora/0923-103544/best_model.pth
+lora,hazy,val,182,77.44063383668333,122.1720775925734,model/swin_t_trans/lora/0923-103544/best_model.pth
+lora,mix,val,364,70.5117813885867,108.66732376517345,model/swin_t_trans/lora/0923-103544/best_model.pth

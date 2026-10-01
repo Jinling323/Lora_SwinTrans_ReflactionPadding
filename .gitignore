@@ -1,0 +1,38 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.env
+
+# Editors, OS files, and local agent metadata
+.vscode/
+.idea/
+.DS_Store
+.agents/
+.codex/
+
+# Datasets and generated samples
+data/
+JHU_Train_Val_Test/
+UCF_Train_Val_Test/
+UCF-QNRF/
+*.jpg
+*.jpeg
+*.npy
+*.mat
+
+# Training outputs, checkpoints, and TensorBoard
+model/
+runs/
+*.pth
+*.pt
+*.tar
+*.ckpt
+*.onnx
+*.log
+events.out.tfevents.*
+
