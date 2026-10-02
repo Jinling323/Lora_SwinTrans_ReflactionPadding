@@ -1,7 +1,7 @@
 import torch
 import os
 import numpy as np
-from models.swin_c_multibatch import swin_t_trans
+from models import swin_c_multibatch as models
 from glob import glob
 from torchvision import transforms
 from PIL import Image
@@ -20,6 +20,10 @@ def parse_args():
     parser.add_argument('--model-path', default='model/best_model.pth',
                         help='model directory')
     parser.add_argument('--device', default='0', help='assign device')
+    parser.add_argument('--model-name', choices=['swin_l_trans', 'swin_t_trans'],
+                        default='swin_t_trans')
+    parser.add_argument('--lora-rank', type=int, default=4)
+    parser.add_argument('--lora-alpha', type=float, default=4.0)
     args = parser.parse_args()
     return args
 
@@ -49,9 +53,30 @@ if __name__ == '__main__':
 
 
     device = torch.device('cuda')
-    model = swin_t_trans(pretrained=False)
+    checkpoint = torch.load(args.model_path, map_location='cpu')
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        state = checkpoint['model_state_dict']
+        model_name = checkpoint.get('model_name', args.model_name)
+        parallel_dwconv = checkpoint.get('parallel_dwconv', False)
+        reflection_attention = checkpoint.get('reflection_attention', False)
+        lora_rank = checkpoint.get('lora_rank', 0)
+        lora_alpha = checkpoint.get('lora_alpha', args.lora_alpha)
+    else:
+        state = checkpoint
+        model_name = args.model_name
+        parallel_dwconv = False
+        reflection_attention = False
+        lora_rank = args.lora_rank
+        lora_alpha = args.lora_alpha
+    model = getattr(models, model_name)(
+        pretrained=False,
+        parallel_dwconv=parallel_dwconv,
+        reflection_attention=reflection_attention,
+    )
+    if any('.parametrizations.weight.' in key for key in state):
+        model.enable_lora(lora_rank, lora_alpha)
     model.to(device)
-    model.load_state_dict(torch.load(args.model_path, device))
+    model.load_state_dict(state)
     epoch_minus = []
     num = 0
 
@@ -88,3 +113,4 @@ if __name__ == '__main__':
             # cv2.imwrite(os.path.join(save_dir_viz,
             #                          im_path.replace('.JPG', logf+'_d.jpg')), outputs)
             cv2.imwrite(os.path.join(save_dir_viz, logf), outputs)
+

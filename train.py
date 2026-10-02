@@ -33,6 +33,20 @@ def parse_args():
     parser.set_defaults(pretrained_backbone=True)
     parser.add_argument('--lora-rank', type=int, default=4)
     parser.add_argument('--lora-alpha', type=float, default=4.0)
+    parser.add_argument(
+        '--parallel-dwconv', dest='parallel_dwconv', action='store_true',
+        help='enable the 5x5 DWConv branch on the complete V map (default)')
+    parser.add_argument(
+        '--no-parallel-dwconv', dest='parallel_dwconv', action='store_false',
+        help='disable the parallel V-map DWConv branch')
+    parser.add_argument(
+        '--reflection-attention', dest='reflection_attention', action='store_true',
+        help='enable reflection-padding window attention (default)')
+    parser.add_argument(
+        '--no-reflection-attention', dest='reflection_attention',
+        action='store_false',
+        help='use original cyclic shifted-window attention and masks')
+    parser.set_defaults(parallel_dwconv=True, reflection_attention=True)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--save-dir', default='model')
     parser.add_argument('--save-all', action='store_true')

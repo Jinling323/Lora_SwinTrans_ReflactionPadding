@@ -36,6 +36,28 @@ def load_checkpoint(path):
         return torch.load(path, map_location='cpu')
 
 
+def validate_attention_config(checkpoint, args, description):
+    """Reject checkpoints built with a different Swin attention layout."""
+    requested = {
+        'parallel_dwconv': args.parallel_dwconv,
+        'reflection_attention': args.reflection_attention,
+    }
+    if not isinstance(checkpoint, dict) or 'model_state_dict' not in checkpoint:
+        if any(requested.values()):
+            raise ValueError(
+                '{} lacks attention metadata; use a checkpoint trained with '
+                'the Dehaze attention options'.format(description)
+            )
+        return
+    for key, value in requested.items():
+        if checkpoint.get(key, False) != value:
+            raise ValueError(
+                '{} {} does not match --{} ({})'.format(
+                    description, key, key.replace('_', '-'), value
+                )
+            )
+
+
 def train_collate(batch):
     transposed_batch = list(zip(*batch))
     images = torch.stack(transposed_batch[0], 0)
@@ -98,11 +120,24 @@ class RegTrainer(Trainer):
         # A resumed checkpoint already contains the backbone weights.
         use_pretrained = (args.stage == 'baseline' and args.pretrained_backbone
                           and not args.resume)
-        self.model = model_builder(pretrained=use_pretrained,
-                                   pretrained_path=args.pretrained_path)
+        self.model = model_builder(
+            pretrained=use_pretrained,
+            pretrained_path=args.pretrained_path,
+            parallel_dwconv=args.parallel_dwconv,
+            reflection_attention=args.reflection_attention,
+        )
+        logging.info(
+            'Dehaze attention blocks: %d (parallel_dwconv=%s, reflection=%s)',
+            self.model.dehaze_attention_blocks,
+            args.parallel_dwconv,
+            args.reflection_attention,
+        )
         if args.stage == 'lora':
             if not args.resume:
                 checkpoint = load_checkpoint(args.baseline_checkpoint)
+                validate_attention_config(
+                    checkpoint, args, 'Baseline checkpoint'
+                )
                 if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                     if checkpoint.get('stage', 'baseline') != 'baseline':
                         raise ValueError('LoRA needs a baseline checkpoint')
@@ -127,6 +162,7 @@ class RegTrainer(Trainer):
             if suf == 'tar':
                 checkpoint = load_checkpoint(args.resume)
                 resumed_state = checkpoint
+                validate_attention_config(checkpoint, args, 'Resume checkpoint')
                 if checkpoint.get('stage', 'baseline') != args.stage:
                     raise ValueError('Resume checkpoint stage does not match')
                 if checkpoint.get('model_name', args.model_name) != args.model_name:
@@ -146,7 +182,10 @@ class RegTrainer(Trainer):
                 else:
                     self.start_epoch = checkpoint['epoch'] + 1
             elif suf == 'pth':
-                self.model.load_state_dict(load_checkpoint(args.resume))
+                checkpoint = load_checkpoint(args.resume)
+                validate_attention_config(checkpoint, args, 'Resume checkpoint')
+                state = checkpoint.get('model_state_dict', checkpoint)
+                self.model.load_state_dict(state)
 
         self.post_prob = Post_Prob(args.sigma,
                                    args.crop_size,
@@ -320,6 +359,8 @@ class RegTrainer(Trainer):
             'model_name': self.args.model_name,
             'stage': self.args.stage,
             'crop_size': self.args.crop_size,
+            'parallel_dwconv': self.args.parallel_dwconv,
+            'reflection_attention': self.args.reflection_attention,
             'lora_rank': self.args.lora_rank if self.args.stage == 'lora' else 0,
             'lora_alpha': self.args.lora_alpha if self.args.stage == 'lora' else 0,
             'seed': self.args.seed,
@@ -414,15 +455,32 @@ class RegTrainer(Trainer):
             logging.info("save best mse {:.2f} mae {:.2f} model epoch {}".format(self.best_mse,
                                                                                  self.best_mae,
                                                                                  self.epoch))
+            best_checkpoint = {
+                'model_name': self.args.model_name,
+                'stage': self.args.stage,
+                'crop_size': self.args.crop_size,
+                'parallel_dwconv': self.args.parallel_dwconv,
+                'reflection_attention': self.args.reflection_attention,
+                'lora_rank': (
+                    self.args.lora_rank if self.args.stage == 'lora' else 0
+                ),
+                'lora_alpha': (
+                    self.args.lora_alpha if self.args.stage == 'lora' else 0
+                ),
+                'best_mae': self.best_mae,
+                'best_mse': self.best_mse,
+                'model_state_dict': model_state_dic,
+            }
             if self.save_all:
                 self.best_model_path = os.path.join(
                     self.save_dir, 'best_model_{}.pth'.format(self.best_count))
-                torch.save(model_state_dic, self.best_model_path)
+                torch.save(best_checkpoint, self.best_model_path)
                 self.best_count += 1
             else:
                 self.best_model_path = os.path.join(self.save_dir, 'best_model.pth')
-                torch.save(model_state_dic, self.best_model_path)
+                torch.save(best_checkpoint, self.best_model_path)
 
         self.writer.add_scalar('best/mae', self.best_mae, self.epoch)
         self.writer.add_scalar('best/rmse', self.best_mse, self.epoch)
         self.writer.flush()
+

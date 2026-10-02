@@ -27,6 +27,23 @@ python train.py --stage lora \
   --baseline-checkpoint model/swin_l_trans/baseline/RUN/best_model.pth
 ```
 
+To replace Swin's cyclic shifted-window attention with DehazeFormer's
+reflection-padding scheme and add the parallel 5x5 depthwise convolution on
+the complete projected V feature map, train a new baseline and LoRA pair:
+
+```bash
+python train.py
+```
+
+The image patch embedding, patch merging, Swin block count, MAN encoder, and
+density head are unchanged. Only the attention implementation inside each
+Swin block is replaced. `--parallel-dwconv` and `--reflection-attention` are
+enabled by default and can be ablated independently with
+`--no-parallel-dwconv` and `--no-reflection-attention`. Checkpoints record
+both settings, and the test script reconstructs the matching architecture.
+An old baseline checkpoint cannot initialize a LoRA run with either new
+attention setting; train a matching clean baseline first.
+
 The default training crop is **256×256**. The official ImageNet-22K
 `swin_large_patch4_window12_384_22k.pth` is read from `pre_models/`, or from
 `--pretrained-path`. Its filename describes pretraining; it does not set this
@@ -69,9 +86,10 @@ python test.py --data-dir SHA/mix --split val \
   --save-dir model/swin_l_trans/lora/RUN/best_model.pth --lora-rank 4 --lora-alpha 4
 ```
 
-Epoch `.tar` checkpoints contain stage, model name, optimizer, and LoRA
-settings. Best `.pth` checkpoints contain model weights; supply the LoRA rank
-and alpha when evaluating a LoRA `.pth` checkpoint.
+Epoch `.tar` checkpoints contain stage, model name, optimizer, attention, and
+LoRA settings. New best `.pth` checkpoints contain the model state plus the
+metadata needed to reconstruct the attention and LoRA structure. Legacy raw
+state-dict `.pth` checkpoints remain supported as original-attention models.
 
 
 ## Citation
@@ -85,3 +103,4 @@ If you use this code for your research, please cite our paper:
   year={2022}
 }
 ```
+

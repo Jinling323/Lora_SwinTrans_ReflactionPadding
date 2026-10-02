@@ -75,10 +75,14 @@ def build_model(args, checkpoint_path, expect_lora):
         state = checkpoint['model_state_dict']
         rank = checkpoint.get('lora_rank', 0)
         alpha = checkpoint.get('lora_alpha', args.lora_alpha)
+        parallel_dwconv = checkpoint.get('parallel_dwconv', False)
+        reflection_attention = checkpoint.get('reflection_attention', False)
     else:
         state = checkpoint
         rank = args.lora_rank if expect_lora else 0
         alpha = args.lora_alpha
+        parallel_dwconv = False
+        reflection_attention = False
 
     contains_lora = any('.parametrizations.weight.' in key for key in state)
     if expect_lora:
@@ -92,7 +96,11 @@ def build_model(args, checkpoint_path, expect_lora):
             '{} is a LoRA checkpoint, not a baseline checkpoint'.format(
                 checkpoint_path))
 
-    model = getattr(models, args.model_name)(pretrained=False)
+    model = getattr(models, args.model_name)(
+        pretrained=False,
+        parallel_dwconv=parallel_dwconv,
+        reflection_attention=reflection_attention,
+    )
     if expect_lora:
         model.enable_lora(rank, alpha)
     model.load_state_dict(state)
@@ -215,3 +223,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
