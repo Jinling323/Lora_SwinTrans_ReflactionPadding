@@ -44,11 +44,14 @@ both settings, and the test script reconstructs the matching architecture.
 An old baseline checkpoint cannot initialize a LoRA run with either new
 attention setting; train a matching clean baseline first.
 
-The default training crop is **256×256**. The official ImageNet-22K
-`swin_large_patch4_window12_384_22k.pth` is read from `pre_models/`, or from
-`--pretrained-path`. Its filename describes pretraining; it does not set this
-project's input size. The 12×12 Swin attention windows are padded as needed
-for 256×256 crops. `--no-pretrained-backbone` starts from random weights.
+The default training crop is **384×384** for both stages. Use
+`--baseline-crop-size` and `--lora-crop-size` to choose them independently;
+the legacy `--crop-size` option sets both to the same value. The official
+ImageNet-22K `swin_large_patch4_window12_384_22k.pth` is read from
+`pre_models/`, or from `--pretrained-path`. Its filename describes
+pretraining; it does not set this project's input size. Swin attention windows
+are padded as needed for the selected crop. `--no-pretrained-backbone` starts
+from random weights.
 The optional `--model-name swin_t_trans` retains the earlier 12-block Swin-T
 model; the default `swin_l_trans` has 24 blocks.
 
@@ -103,4 +106,3 @@ If you use this code for your research, please cite our paper:
   year={2022}
 }
 ```
-

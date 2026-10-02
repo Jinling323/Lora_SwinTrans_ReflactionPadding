@@ -77,12 +77,23 @@ def parse_args():
     parser.add_argument('--tensorboard-log-interval', type=int, default=10,
                         help='batch interval for TensorBoard and train.log loss')
     parser.add_argument('--is-gray', action='store_true')
-    parser.add_argument('--crop-size', type=int, default=384)
+    parser.add_argument(
+        '--baseline-crop-size', type=int, default=256,
+        help='training crop size for the clean baseline stage')
+    parser.add_argument(
+        '--lora-crop-size', type=int, default=384,
+        help='training crop size for the LoRA adaptation stage')
+    parser.add_argument(
+        '--crop-size', type=int, default=None,
+        help='legacy shortcut that sets both stage crop sizes')
     parser.add_argument('--downsample-ratio', type=int, default=16)
     parser.add_argument('--use-background', type=bool, default=True)
     parser.add_argument('--sigma', type=float, default=8.0)
     parser.add_argument('--background-ratio', type=float, default=0.15)
     args = parser.parse_args()
+    if args.crop_size is not None:
+        args.baseline_crop_size = args.crop_size
+        args.lora_crop_size = args.crop_size
     if args.stage == 'lora' and not (args.baseline_checkpoint or args.resume):
         parser.error('--stage lora needs --baseline-checkpoint or --resume')
     if args.stage == 'both' and args.baseline_checkpoint:
@@ -101,8 +112,16 @@ def parse_args():
                 val_start >= epochs):
             parser.error('--{}-val-start must be less than --{}-epochs '
                          'to select a best checkpoint'.format(name, name))
-    if args.crop_size <= 0 or args.crop_size % args.downsample_ratio:
-        parser.error('--crop-size must be positive and divisible by --downsample-ratio')
+    for option, crop_size in (
+        ('--baseline-crop-size', args.baseline_crop_size),
+        ('--lora-crop-size', args.lora_crop_size),
+    ):
+        if crop_size <= 0 or crop_size % args.downsample_ratio:
+            parser.error(
+                '{} must be positive and divisible by --downsample-ratio'.format(
+                    option
+                )
+            )
     if args.lora_rank <= 0 or args.lora_alpha <= 0:
         parser.error('LoRA rank and alpha must be positive')
     return args
@@ -124,10 +143,12 @@ def run_stage(args, stage, baseline_checkpoint=''):
         stage_args.max_epoch = args.pretrain_epochs
         stage_args.val_epoch = args.pretrain_val_epoch
         stage_args.val_start = args.pretrain_val_start
+        stage_args.crop_size = args.baseline_crop_size
     else:
         stage_args.max_epoch = args.lora_epochs
         stage_args.val_epoch = args.lora_val_epoch
         stage_args.val_start = args.lora_val_start
+        stage_args.crop_size = args.lora_crop_size
     stage_args.save_dir = os.path.join(args.save_dir, args.model_name, stage)
     stage_args.lr = args.lora_lr if stage == 'lora' else args.lr
     if stage == 'lora' and baseline_checkpoint:
