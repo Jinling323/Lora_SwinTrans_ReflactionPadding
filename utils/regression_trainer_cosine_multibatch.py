@@ -31,9 +31,14 @@ def seed_worker(worker_id):
 
 def load_checkpoint(path):
     try:
-        return torch.load(path, map_location='cpu', mmap=True)
+        return torch.load(
+            path, map_location='cpu', mmap=True, weights_only=False
+        )
     except TypeError:
-        return torch.load(path, map_location='cpu')
+        try:
+            return torch.load(path, map_location='cpu', weights_only=False)
+        except TypeError:
+            return torch.load(path, map_location='cpu')
 
 
 def validate_attention_config(checkpoint, args, description):
@@ -483,4 +488,3 @@ class RegTrainer(Trainer):
         self.writer.add_scalar('best/mae', self.best_mae, self.epoch)
         self.writer.add_scalar('best/rmse', self.best_mse, self.epoch)
         self.writer.flush()
-

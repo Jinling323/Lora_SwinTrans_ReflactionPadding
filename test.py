@@ -45,9 +45,14 @@ def parse_args():
 
 def load_checkpoint(path):
     try:
-        return torch.load(path, map_location='cpu', mmap=True)
+        return torch.load(
+            path, map_location='cpu', mmap=True, weights_only=False
+        )
     except TypeError:
-        return torch.load(path, map_location='cpu')
+        try:
+            return torch.load(path, map_location='cpu', weights_only=False)
+        except TypeError:
+            return torch.load(path, map_location='cpu')
 
 
 def resolve_checkpoint(explicit_path, checkpoint_root, model_name, stage):
@@ -223,4 +228,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

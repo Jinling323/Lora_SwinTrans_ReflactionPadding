@@ -62,12 +62,23 @@ class RegTrainer(Trainer):
         if args.resume:
             suf = args.resume.rsplit('.', 1)[-1]
             if suf == 'tar':
-                checkpoint = torch.load(args.resume, self.device)
+                try:
+                    checkpoint = torch.load(
+                        args.resume, self.device, weights_only=False
+                    )
+                except TypeError:
+                    checkpoint = torch.load(args.resume, self.device)
                 self.model.load_state_dict(checkpoint['model_state_dict'])
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 self.start_epoch = checkpoint['epoch'] + 1
             elif suf == 'pth':
-                self.model.load_state_dict(torch.load(args.resume, self.device))
+                try:
+                    checkpoint = torch.load(
+                        args.resume, self.device, weights_only=False
+                    )
+                except TypeError:
+                    checkpoint = torch.load(args.resume, self.device)
+                self.model.load_state_dict(checkpoint)
 
         self.post_prob = Post_Prob(args.sigma,
                                    args.crop_size,
@@ -207,6 +218,5 @@ class RegTrainer(Trainer):
                 self.best_count += 1
             else:
                 torch.save(model_state_dic, os.path.join(self.save_dir, 'best_model.pth'))
-
 
 

@@ -22,9 +22,16 @@ def _load_official_swin_large(backbone, path):
     if not os.path.isfile(path):
         raise FileNotFoundError('Swin-L pretrained checkpoint not found: {}'.format(path))
     try:
-        checkpoint = torch.load(path, map_location='cpu', mmap=True)
+        checkpoint = torch.load(
+            path, map_location='cpu', mmap=True, weights_only=False
+        )
     except TypeError:
-        checkpoint = torch.load(path, map_location='cpu')
+        try:
+            checkpoint = torch.load(
+                path, map_location='cpu', weights_only=False
+            )
+        except TypeError:
+            checkpoint = torch.load(path, map_location='cpu')
     source = checkpoint.get('model', checkpoint)
     expected = backbone.state_dict()
     mapped = {}
@@ -169,4 +176,3 @@ def swin_l_trans(pretrained=True, pretrained_path=None,
         parallel_dwconv=parallel_dwconv,
         reflection_attention=reflection_attention,
     )
-

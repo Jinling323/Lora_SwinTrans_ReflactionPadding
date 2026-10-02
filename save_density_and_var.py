@@ -53,7 +53,12 @@ if __name__ == '__main__':
 
 
     device = torch.device('cuda')
-    checkpoint = torch.load(args.model_path, map_location='cpu')
+    try:
+        checkpoint = torch.load(
+            args.model_path, map_location='cpu', weights_only=False
+        )
+    except TypeError:
+        checkpoint = torch.load(args.model_path, map_location='cpu')
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         state = checkpoint['model_state_dict']
         model_name = checkpoint.get('model_name', args.model_name)
@@ -113,4 +118,3 @@ if __name__ == '__main__':
             # cv2.imwrite(os.path.join(save_dir_viz,
             #                          im_path.replace('.JPG', logf+'_d.jpg')), outputs)
             cv2.imwrite(os.path.join(save_dir_viz, logf), outputs)
-
