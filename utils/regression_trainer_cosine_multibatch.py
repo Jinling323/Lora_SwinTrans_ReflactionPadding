@@ -41,26 +41,61 @@ def load_checkpoint(path):
             return torch.load(path, map_location='cpu')
 
 
-def validate_attention_config(checkpoint, args, description):
-    """Reject checkpoints built with a different Swin attention layout."""
+def validate_attention_config(
+        checkpoint, args, description, allow_parallel_upgrade=False):
+    """Reject incompatible attention layouts.
+
+    A vanilla baseline may be upgraded with a new, zero-initialized DWConv V
+    branch for adaptation. Reflection attention changes the baseline function
+    itself and therefore must still match exactly.
+    """
     requested = {
         'parallel_dwconv': args.parallel_dwconv,
         'reflection_attention': args.reflection_attention,
     }
     if not isinstance(checkpoint, dict) or 'model_state_dict' not in checkpoint:
-        if any(requested.values()):
+        if requested['reflection_attention'] or (
+                requested['parallel_dwconv'] and not allow_parallel_upgrade):
             raise ValueError(
                 '{} lacks attention metadata; use a checkpoint trained with '
                 'the Dehaze attention options'.format(description)
             )
         return
     for key, value in requested.items():
-        if checkpoint.get(key, False) != value:
+        checkpoint_value = checkpoint.get(key, False)
+        if (key == 'parallel_dwconv' and allow_parallel_upgrade
+                and value and not checkpoint_value):
+            continue
+        if checkpoint_value != value:
             raise ValueError(
                 '{} {} does not match --{} ({})'.format(
                     description, key, key.replace('_', '-'), value
                 )
             )
+
+
+def load_baseline_for_adaptation(model, state):
+    """Load a baseline while allowing only newly added DWConv parameters."""
+    incompatible = model.load_state_dict(state, strict=False)
+    allowed_missing = {
+        name
+        for name in model.state_dict()
+        if (name.endswith('.parallel_dwconv.weight')
+            or name.endswith('.parallel_dwconv.bias'))
+    }
+    actual_missing = set(incompatible.missing_keys)
+    unexpected = set(incompatible.unexpected_keys)
+    disallowed_missing = actual_missing - allowed_missing
+    if disallowed_missing or unexpected:
+        raise RuntimeError(
+            'Baseline checkpoint is incompatible: missing={}, unexpected={}'
+            .format(sorted(disallowed_missing), sorted(unexpected))
+        )
+    if actual_missing and actual_missing != allowed_missing:
+        raise RuntimeError(
+            'Baseline DWConv layout is incomplete: expected missing={}, got={}'
+            .format(sorted(allowed_missing), sorted(actual_missing))
+        )
 
 
 def train_collate(batch):
@@ -141,7 +176,10 @@ class RegTrainer(Trainer):
             if not args.resume:
                 checkpoint = load_checkpoint(args.baseline_checkpoint)
                 validate_attention_config(
-                    checkpoint, args, 'Baseline checkpoint'
+                    checkpoint,
+                    args,
+                    'Baseline checkpoint',
+                    allow_parallel_upgrade=True,
                 )
                 if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                     if checkpoint.get('stage', 'baseline') != 'baseline':
@@ -149,9 +187,14 @@ class RegTrainer(Trainer):
                     if checkpoint.get('model_name', args.model_name) != args.model_name:
                         raise ValueError('Baseline checkpoint model name does not match')
                 state = checkpoint.get('model_state_dict', checkpoint)
-                self.model.load_state_dict(state)
+                load_baseline_for_adaptation(self.model, state)
             count = self.model.enable_lora(args.lora_rank, args.lora_alpha)
-            logging.info('LoRA added to %d Swin attention blocks', count)
+            logging.info(
+                'Q/V LoRA added to %d Swin attention blocks; DWConv V '
+                'adapters are trainable=%s',
+                count,
+                args.parallel_dwconv,
+            )
         self.model.to(self.device)
         trainable = [parameter for parameter in self.model.parameters()
                      if parameter.requires_grad]

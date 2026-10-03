@@ -15,10 +15,12 @@ The CCST count head and CCST trainer are not used.
 
 Install dependencies with `pip install -r requirements.txt`. By default,
 `python train.py` first trains the full 24-block baseline on `SHA/clean/train`
-and selects its best checkpoint on `SHA/clean/val`. It then freezes that
-baseline and trains Q/V LoRA in all 24 Swin attention blocks on
-`SHA/hazy/train`, selecting the best result on `SHA/mix/val`. The MAN head
-and custom Transformer stay frozen during LoRA training.
+and selects its best checkpoint on `SHA/clean/val`. The baseline uses the
+original Swin shifted-window attention. It then freezes that baseline and
+trains Q/V LoRA plus a newly added 5x5 depthwise-convolution V adapter in all
+24 Swin attention blocks on `SHA/hazy/train`, selecting the best result on
+`SHA/mix/val`. The original backbone weights, MAN head, and custom Transformer
+stay frozen during adaptation.
 
 ```bash
 python train.py
@@ -27,22 +29,22 @@ python train.py --stage lora \
   --baseline-checkpoint model/swin_l_trans/baseline/RUN/best_model.pth
 ```
 
-To replace Swin's cyclic shifted-window attention with DehazeFormer's
-reflection-padding scheme and add the parallel 5x5 depthwise convolution on
-the complete projected V feature map, train a new baseline and LoRA pair:
+By default the LoRA stage keeps Swin's original cyclic shifted-window
+attention and adds the parallel 5x5 depthwise convolution on the complete
+projected V feature map:
 
 ```bash
 python train.py
 ```
 
-The image patch embedding, patch merging, Swin block count, MAN encoder, and
-density head are unchanged. Only the attention implementation inside each
-Swin block is replaced. `--parallel-dwconv` and `--reflection-attention` are
-enabled by default and can be ablated independently with
-`--no-parallel-dwconv` and `--no-reflection-attention`. Checkpoints record
-both settings, and the test script reconstructs the matching architecture.
-An old baseline checkpoint cannot initialize a LoRA run with either new
-attention setting; train a matching clean baseline first.
+The DWConv weights and LoRA B matrices start at zero, so adaptation initially
+reproduces the baseline function. A legacy baseline without DWConv can be
+passed directly to `--baseline-checkpoint`; loading permits only the expected
+new `parallel_dwconv` weights to be absent. `--parallel-dwconv` is enabled by
+default for LoRA and can be disabled with `--no-parallel-dwconv`.
+`--reflection-attention` is disabled by default and may be enabled explicitly.
+Checkpoints record both settings, and the test script reconstructs the matching
+architecture.
 
 The default training crop is **384×384** for both stages. Use
 `--baseline-crop-size` and `--lora-crop-size` to choose them independently;

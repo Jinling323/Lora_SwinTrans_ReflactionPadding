@@ -11,7 +11,10 @@ from .transformer_cosine_multibatch import (
     TransformerEncoderLayer,
 )
 from .swin_lora import add_swin_qv_lora
-from .dehaze_swin_attention import add_dehaze_attention
+from .dehaze_swin_attention import (
+    DehazeShiftedWindowAttention,
+    add_dehaze_attention,
+)
 
 
 __all__ = ["swin_t_trans", "swin_l_trans"]
@@ -74,7 +77,7 @@ class SwinTransMultiBatch(nn.Module):
     """Swin backbone followed by the original multibatch MAN head."""
 
     def __init__(self, pretrained=True, variant='large', pretrained_path=None,
-                 parallel_dwconv=True, reflection_attention=True):
+                 parallel_dwconv=True, reflection_attention=False):
         super().__init__()
         if variant == 'large':
             backbone = SwinTransformer(
@@ -151,14 +154,20 @@ class SwinTransMultiBatch(nn.Module):
         return torch.relu(density), consistency_features
 
     def enable_lora(self, rank=4, alpha=4.0):
-        """Freeze the clean baseline and adapt all backbone attention Q/V."""
+        """Freeze the baseline and train Q/V LoRA plus the DWConv V adapters."""
         for parameter in self.parameters():
             parameter.requires_grad_(False)
-        return add_swin_qv_lora(self.backbone_features, rank, alpha)
+        count = add_swin_qv_lora(self.backbone_features, rank, alpha)
+        for module in self.modules():
+            if (isinstance(module, DehazeShiftedWindowAttention)
+                    and module.parallel_dwconv_enabled):
+                for parameter in module.parallel_dwconv.parameters():
+                    parameter.requires_grad_(True)
+        return count
 
 
 def swin_t_trans(pretrained=True, pretrained_path=None,
-                 parallel_dwconv=True, reflection_attention=True):
+                 parallel_dwconv=True, reflection_attention=False):
     return SwinTransMultiBatch(
         pretrained=pretrained,
         variant='tiny',
@@ -168,7 +177,7 @@ def swin_t_trans(pretrained=True, pretrained_path=None,
 
 
 def swin_l_trans(pretrained=True, pretrained_path=None,
-                 parallel_dwconv=True, reflection_attention=True):
+                 parallel_dwconv=True, reflection_attention=False):
     return SwinTransMultiBatch(
         pretrained=pretrained,
         variant='large',

@@ -35,18 +35,18 @@ def parse_args():
     parser.add_argument('--lora-alpha', type=float, default=4.0)
     parser.add_argument(
         '--parallel-dwconv', dest='parallel_dwconv', action='store_true',
-        help='enable the 5x5 DWConv branch on the complete V map (default)')
+        help='add a trainable 5x5 DWConv V adapter in the LoRA stage (default)')
     parser.add_argument(
         '--no-parallel-dwconv', dest='parallel_dwconv', action='store_false',
         help='disable the parallel V-map DWConv branch')
     parser.add_argument(
         '--reflection-attention', dest='reflection_attention', action='store_true',
-        help='enable reflection-padding window attention (default)')
+        help='enable reflection-padding window attention')
     parser.add_argument(
         '--no-reflection-attention', dest='reflection_attention',
         action='store_false',
         help='use original cyclic shifted-window attention and masks')
-    parser.set_defaults(parallel_dwconv=True, reflection_attention=True)
+    parser.set_defaults(parallel_dwconv=True, reflection_attention=False)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--save-dir', default='model')
     parser.add_argument('--save-all', action='store_true')
@@ -144,6 +144,9 @@ def run_stage(args, stage, baseline_checkpoint=''):
         stage_args.val_epoch = args.pretrain_val_epoch
         stage_args.val_start = args.pretrain_val_start
         stage_args.crop_size = args.baseline_crop_size
+        # Keep the clean baseline identical to the original Swin model. The
+        # DWConv V branch is an adaptation module introduced in the LoRA stage.
+        stage_args.parallel_dwconv = False
     else:
         stage_args.max_epoch = args.lora_epochs
         stage_args.val_epoch = args.lora_val_epoch
